@@ -5,6 +5,8 @@ Curr files:
 
 TODO
 Trapezoid implementation -- discuss functions and attributes of trapezoids
+
 DAG Node -- same as above
+
 DAG -- implement graph class containing DAG nodes. An instance of this might take in a list if segments as an argument and then compute the DAG 
 
