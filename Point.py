@@ -31,7 +31,3 @@ class Point(GraphObject):
         Defines the string representation of the Point.
         """
         return f'({self.x:.2f}, {self.y:.2f})'
-        return NotImplemented
-
-    def __repr__(self):
-        return '(%.2f, %.2f)' % (self.x, self.y)
