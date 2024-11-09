@@ -4,11 +4,10 @@ from GraphObject import GraphObject
 from DAGNode import DAGNode
 
 class Trapezoid(GraphObject):
-    def __init__(self, left_p, right_p, top, bottom):
+    def __init__(self, left_p, right_p, top, bottom, label=None):
         super().__init__()
         assert isinstance(left_p, Point) and isinstance(right_p, Point), 'left_p and/or right_p is not a point'
-        assert isinstance(top, LineSegment) and isinstance(bottom,
-                                                           LineSegment), 'top and/or bottom is not a line segment'
+        assert isinstance(top, LineSegment) and isinstance(bottom, LineSegment), 'top and/or bottom is not a line segment'
         self.left_p = left_p
         self.right_p = right_p
         self.top = top
@@ -16,6 +15,7 @@ class Trapezoid(GraphObject):
         self.left_neighbors = set()
         self.right_neighbors = set()
         self._node = DAGNode(self)
+        self.label = label  # Label is assigned externally
 
     @property
     def node(self):
@@ -26,10 +26,9 @@ class Trapezoid(GraphObject):
         self._node.modify(node)
 
     def updateLeftNeighbors(self, neighbors, auto=False):
-
         for n in neighbors:
             assert isinstance(n, Trapezoid)
-            # if the neighbor already exists or its not directly adjacent to self, then skip
+            # If the neighbor already exists or it's not directly adjacent, skip
             if n in self.left_neighbors or self.left_p.x != n.right_p.x:
                 continue
             self.left_neighbors.add(n)
@@ -37,14 +36,14 @@ class Trapezoid(GraphObject):
                 n.updateRightNeighbors({self}, auto=True)
 
     def updateRightNeighbors(self, neighbors, auto=False):
-       for n in neighbors:
+        for n in neighbors:
             assert isinstance(n, Trapezoid)
-            # if the neighbor already exists or its not directly adjacent to self, then skip
-            if n in self.left_neighbors or self.left_p.x != n.right_p.x:
+            # If the neighbor already exists or it's not directly adjacent, skip
+            if n in self.right_neighbors or self.right_p.x != n.left_p.x:
                 continue
             self.right_neighbors.add(n)
             if not auto:
-                n.updateLeftNeighbors({self})
+                n.updateLeftNeighbors({self}, auto=True)
 
     def __hash__(self):
         return super().__hash__()
@@ -61,5 +60,6 @@ class Trapezoid(GraphObject):
         return NotImplemented
 
     def __repr__(self):
-        return '<Trapezoid left_p:%s right_p:%s top:%s bottom:%s>' % (str(self.left_p), str(self.right_p),
-                                                                      str(self.top), str(self.bottom))
+        return '<Trapezoid %s left_p:%s right_p:%s top:%s bottom:%s>' % (
+            self.label if self.label else '',
+            str(self.left_p), str(self.right_p), str(self.top), str(self.bottom))
