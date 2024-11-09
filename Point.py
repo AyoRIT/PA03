@@ -1,44 +1,36 @@
 from GraphObject import GraphObject
 
-
 class Point(GraphObject):
-    def __init__(self, x, y):
+    def __init__(self, x, y, label=None):
+        """
+        Initializes a Point with coordinates x and y, and an optional label.
+        """
         super().__init__()
-        self.x = x
-        self.y = y
-
-    def get_x(self):
-        return self._x
-
-    def get_y(self):
-        return self._y
-
-    def set_x(self, x):
-        assert isinstance(float(x), float), \
-            'Points must have positive integer x-coordinate: %d' % x
-        self._x = x
-
-    def set_y(self, y):
-        assert isinstance(float(y), float), \
-            'Points must have positive integer y-coordinate: %d' % y
-        self._y = y
-
-    x = property(get_x, set_x)
-    y = property(get_y, set_y)
-
-    def __hash__(self):
-        return super().__hash__()
+        self.x = float(x)  # Convert x to float
+        self.y = float(y)  # Convert y to float
+        self.label = label  # Assign label if provided
 
     def __eq__(self, other):
-        """Override the default Equals behavior"""
+        """
+        Overrides the default equality method.
+        Points are equal if their x and y coordinates are equal.
+        """
         if isinstance(other, self.__class__):
-            return self.__dict__ == other.__dict__
+            return self.x == other.x and self.y == other.y
         return NotImplemented
 
-    def __ne__(self, other):
-        """Define a non-equality test"""
-        if isinstance(other, self.__class__):
-            return not self == other
+    def __hash__(self):
+        """
+        Overrides the default hash method.
+        Allows Points to be used in sets and as dictionary keys.
+        """
+        return hash((self.x, self.y))
+
+    def __repr__(self):
+        """
+        Defines the string representation of the Point.
+        """
+        return f'({self.x:.2f}, {self.y:.2f})'
         return NotImplemented
 
     def __repr__(self):
