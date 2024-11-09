@@ -6,176 +6,281 @@ import random
 
 class RandomizedIncrementalConstruction:
     def __init__(self, segments):
+        """
+        Initializes the Randomized Incremental Construction algorithm.
+        """
         for segment in segments:
             assert isinstance(segment, LineSegment)
-        self.segements = segments
+        self.segments = segments
         self.DAG = None
-        self.computeDecomposition()
+        self.new_trapezoids = []
+        self.trapezoid_counter = 2  # Start from 2 since T1 is used for the bounding box
 
-    def computeDecomposition(self):
-        self.computeBoundingBox()
-        for segment in self.segements:
-            self.insert_segment()
-
-    def computeBoundingBox(self, topRightPoint, bottomLeftPoint):
-        topRight = topRightPoint
+    def computeBoundingBox(self, bottomLeftPoint, topRightPoint):
         bottomLeft = bottomLeftPoint
+        topRight = topRightPoint
 
-        # Now add the bounding box as a trapezoid
-        B = Trapezoid(bottomLeft, topRight,
-                      LineSegment(Point(bottomLeft.x, topRight.y), topRight),
-                      LineSegment(bottomLeft, Point(topRight.x, bottomLeft.y)))
-        
+        top_segment = LineSegment(Point(bottomLeft.x, topRight.y), topRight, label='S0')
+        bottom_segment = LineSegment(bottomLeft, Point(topRight.x, bottomLeft.y), label='S0')
+
+        B = Trapezoid(bottomLeft, topRight, top_segment, bottom_segment, label='T1')
+
         self.DAG = DAG(DAGNode(B))
+        self.trapezoid_counter = 2
+
+    def computeDecomposition(self, bottomLeftPoint, topRightPoint):
+        self.computeBoundingBox(bottomLeftPoint, topRightPoint)
+
+        for segment in self.segments:
+            self.insert_segment(segment)
 
     def getIntersectingTrapezoids(self, line_seg):
         assert isinstance(line_seg, LineSegment)
-        left_trap = self.DAG.root.getQueryResult(line_seg.left, line_seg)
-        right_trap = self.DAG.root.getQueryResult(line_seg.right, line_seg)
-        current_trapezoid = left_trap[0].graph_object
-        intersecting_trapezoids = [current_trapezoid]
 
-        while current_trapezoid != right_trap[0].graph_object:
-            for right_nei in current_trapezoid.right_neighbors:
-                if current_trapezoid.right_p != right_nei.left_p:
-                    l = LineSegment(current_trapezoid.right_p, right_nei.left_p)
-                else:
-                    if right_nei.left_p == right_nei.bottom.left:
-                        l = right_nei.top
-                        y = l.slope * right_nei.left_p.x + l.intercept
-                        l = LineSegment(right_nei.left_p, Point(right_nei.left_p.x, y))
-                    elif right_nei.left_p == right_nei.top.left:
-                        l = right_nei.bottom
-                        y = l.slope * right_nei.left_p.x + l.intercept
-                        l = LineSegment(Point(right_nei.left_p.x, y), right_nei.left_p)
-                    else:
-                        l = right_nei.bottom
-                        bottom_y = l.slope * right_nei.left_p.x + l.intercept
-                        l = right_nei.top
-                        top_y = l.slope * right_nei.left_p.x + l.intercept
-                        l = LineSegment(Point(right_nei.left_p.x, bottom_y), Point(right_nei.left_p.x, top_y))
+        # Find the trapezoid containing the left endpoint of the segment
+        left_trap_node = self.DAG.root.query(line_seg.left)
+        left_trap = left_trap_node.graph_object
+        left_point_exists = (line_seg.left == left_trap.left_p or line_seg.left == left_trap.right_p)
 
-                if l.intersects(line_seg):
-                    intersecting_trapezoids.append(right_nei)
-                    current_trapezoid = right_nei
+        # Find the trapezoid containing the right endpoint of the segment
+        right_trap_node = self.DAG.root.query(line_seg.right)
+        right_trap = right_trap_node.graph_object
+        right_point_exists = (line_seg.right == right_trap.left_p or line_seg.right == right_trap.right_p)
+
+        # Initialize the list of intersecting trapezoids
+        intersecting_trapezoids = []
+        current_trapezoid = left_trap
+
+        while True:
+            intersecting_trapezoids.append(current_trapezoid)
+            if current_trapezoid == right_trap:
+                break
+
+            # Move to the next trapezoid to the right
+            next_trap = None
+            for neighbor in current_trapezoid.right_neighbors:
+                # Check if the neighbor is to the right of the current trapezoid
+                if neighbor.left_p.x >= current_trapezoid.right_p.x:
+                    next_trap = neighbor
                     break
 
-        return intersecting_trapezoids, left_trap, right_trap
+            if next_trap is not None:
+                current_trapezoid = next_trap
+            else:
+                # Handle cases where there is no right neighbor
+                # You can choose to break or raise an exception
+                # For now, we'll break the loop
+                break
+
+        return intersecting_trapezoids, (left_trap_node, left_point_exists), (right_trap_node, right_point_exists)
 
     def insert_segment(self, segment):
-        # assert segment
+        # Assert segment is a LineSegment instance
         assert isinstance(segment, LineSegment)
-        
-        # find all trapezoids intersected by segment
-        intersectingTrapezoids, (leftTrapNode, leftPointExists), (rightTrapNode, rightPointExists) = self.getIntersectingTrapezoids(segment)
+
+        # Initialize the list to keep track of new trapezoids created in this insertion
+        self.new_trapezoids = []
+
+        # Find all trapezoids intersected by the segment
+        intersectingTrapezoids, (leftTrapNode, leftPointExists), (
+            rightTrapNode, rightPointExists) = self.getIntersectingTrapezoids(segment)
         leftTrapezoid, rightTrapezoid = leftTrapNode.graph_object, rightTrapNode.graph_object
 
-        # CASE 1: p and q lie in the same trapezoid
+        # Dictionaries to keep track of new trapezoids for neighbor updates
+        trap_dict = {}
+
+        # CASE 1: The segment lies completely within one trapezoid
         if len(intersectingTrapezoids) == 1:
-            # we always need to split the trapezoid
-            newTopTrapezoid = Trapezoid(segment.left, segment.right, leftTrapezoid.top, segment)
-            newBottomTrapezoid = Trapezoid(segment.left, segment.right, segment, leftTrapezoid.bottom)
+            D = leftTrapezoid  # Only one trapezoid intersected
 
-            # if the right point of the segment already existed within the DAG, a right trapezoid would not be created so we have to update the neighbors of the top and bottom trapezoids
-            if rightPointExists:
-                newBottomTrapezoid.updateLeftNeighbors(leftTrapezoid.right_neighbors)
-                newTopTrapezoid.updateRightNeighbors(leftTrapezoid.right_neighbors)
-            # else create right trapezoid, set neighbors 
+            # Create new trapezoids
+            # Left trapezoid (if needed)
+            if not leftPointExists and segment.left.x > D.left_p.x:
+                left_trap = Trapezoid(D.left_p, segment.left, D.top, D.bottom)
+                left_node = DAGNode(left_trap)
+                self.new_trapezoids.append(left_trap)
             else:
-                newRightTrapezoid = Trapezoid(segment.left, leftTrapezoid.right_p, leftTrapezoid.top, leftTrapezoid.bottom)
-                # Set neigbors for new right trapezoid
-                newRightTrapezoid.updateLeftNeighbors({newBottomTrapezoid, newTopTrapezoid})
-                newRightTrapezoid.updateRightNeighbors(leftTrapezoid.right_neighbors)
-            
-            # repeat process for left point, left trapezoid
-            if leftPointExists:
-                newBottomTrapezoid.updateLeftNeighbors(leftTrapezoid.right_neighbors)
-                newTopTrapezoid.updateRightNeighbors(leftTrapezoid.right_neighbors)
-            else:
-                newLeftTrapezoid = Trapezoid(leftTrapezoid.left_p, segment.left, leftTrapezoid.top, leftTrapezoid.bottom)
-                # Set neigbors for new left trapezoid
-                newLeftTrapezoid.updateLeftNeighbors({newBottomTrapezoid, newTopTrapezoid})
-                newRightTrapezoid.updateRightNeighbors(leftTrapezoid.right_neighbors) 
+                left_trap = None
+                left_node = None
 
-            # create node replacement for trapezoids (see slides for naming conventions, case 2)
-            s_node = DAGNode(segment, newTopTrapezoid.node, newBottomTrapezoid.node)
-            q_node = DAGNode(segment.right, s_node, newRightTrapezoid)
-            p_node = DAGNode(segment.left, newLeftTrapezoid, q_node)
-            leftTrapNode.modify(p_node)
-        
+            # Right trapezoid (if needed)
+            if not rightPointExists and segment.right.x < D.right_p.x:
+                right_trap = Trapezoid(segment.right, D.right_p, D.top, D.bottom)
+                right_node = DAGNode(right_trap)
+                self.new_trapezoids.append(right_trap)
+            else:
+                right_trap = None
+                right_node = None
+
+            # Top middle trapezoid
+            top_trap = Trapezoid(segment.left, segment.right, D.top, segment)
+            top_node = DAGNode(top_trap)
+            self.new_trapezoids.append(top_trap)
+
+            # Bottom middle trapezoid
+            bottom_trap = Trapezoid(segment.left, segment.right, segment, D.bottom)
+            bottom_node = DAGNode(bottom_trap)
+            self.new_trapezoids.append(bottom_trap)
+
+            # Update neighbors
+            if left_trap:
+                left_trap.right_neighbors = {top_trap, bottom_trap}
+                top_trap.left_neighbors = {left_trap}
+                bottom_trap.left_neighbors = {left_trap}
+                trap_dict[left_trap] = left_node
+            else:
+                top_trap.left_neighbors = D.left_neighbors
+                bottom_trap.left_neighbors = D.left_neighbors
+
+            if right_trap:
+                right_trap.left_neighbors = {top_trap, bottom_trap}
+                top_trap.right_neighbors = {right_trap}
+                bottom_trap.right_neighbors = {right_trap}
+                trap_dict[right_trap] = right_node
+            else:
+                top_trap.right_neighbors = D.right_neighbors
+                bottom_trap.right_neighbors = D.right_neighbors
+
+            trap_dict[top_trap] = top_node
+            trap_dict[bottom_trap] = bottom_node
+
+            # Build the DAG nodes
+            s_node = DAGNode(segment, top_node, bottom_node)
+            if right_node:
+                q_node = DAGNode(segment.right, s_node, right_node)
+            else:
+                q_node = DAGNode(segment.right, s_node, None)
+            if left_node:
+                p_node = DAGNode(segment.left, left_node, q_node)
+            else:
+                p_node = DAGNode(segment.left, None, q_node)
+
+            # Replace the old trapezoid's node in the DAG
+            D.node.modify(p_node)
+
         else:
-            # Divide left trapezoid into bottom, top trapezoids (left trapezoid only exists if leftPoint does not exist)
-            newLeftBottomTrapezoid = Trapezoid(segment.left, leftTrapezoid.right_p, segment, leftTrapezoid.bottom)
+            # CASE 2: The segment spans multiple trapezoids
 
-            # DONT UNDERSTAND
-            # newLeftBottomTrapezoid.updateRightNeighbors(
-            #     {n for n in leftTrapezoid.right_neighbors if not segment.aboveLine(n.top.right)})
+            # Process leftmost trapezoid
+            D0 = leftTrapezoid
 
-            newLeftTopTrapezoid = Trapezoid(segment.left, leftTrapezoid.right_p, leftTrapezoid.top, segment)
-            
-            # DONT UNDERSTAND
-            # newLeftTopTrapezoid.updateRightNeighbors(
-            #     {n for n in leftTrapezoid.right_neighbors if segment.aboveLine(n.bottom.right)})
-
-
-            if not leftPointExists:
-                newLeftTrapezoid = Trapezoid(leftTrapezoid.left_p, segment.left, leftTrapezoid.top, leftTrapezoid.bottom)
-                newLeftTrapezoid.updateLeftNeighbors(leftTrapezoid.left_neighbors)
-                newLeftTrapezoid.updateRightNeighbors({newLeftTopTrapezoid, newLeftBottomTrapezoid})
+            if not leftPointExists and segment.left.x > D0.left_p.x:
+                left_trap = Trapezoid(D0.left_p, segment.left, D0.top, D0.bottom)
+                left_node = DAGNode(left_trap)
+                trap_dict[left_trap] = left_node
+                self.new_trapezoids.append(left_trap)
             else:
-                # update neighbours if right point exists
-                newLeftTopTrapezoid.updateLeftNeighbors(leftTrapezoid.left_neighbors)
-                newLeftBottomTrapezoid.updateLeftNeighbors(leftTrapezoid.left_neighbors)
+                left_trap = None
+                left_node = None
 
-            # repeat process for right point trapezoids
-            newRightBottomTrapezoid = Trapezoid(rightTrapezoid.left_p, segment.right, segment, rightTrapezoid.bottom)
+            left_top_trap = Trapezoid(segment.left, D0.right_p, D0.top, segment)
+            left_bottom_trap = Trapezoid(segment.left, D0.right_p, segment, D0.bottom)
+            left_top_node = DAGNode(left_top_trap)
+            left_bottom_node = DAGNode(left_bottom_trap)
+            self.new_trapezoids.extend([left_top_trap, left_bottom_trap])
+            trap_dict[left_top_trap] = left_top_node
+            trap_dict[left_bottom_trap] = left_bottom_node
 
-            # DONT UNDERSTAND
-            # newRightBottomTrapezoid.updateLeftNeighbors(
-            #     {n for n in rightTrapezoid.left_neighbors if not segment.aboveLine(n.top.right)})
-
-            newRightTopTrapezoid = Trapezoid(rightTrapezoid.left_p, segment.right, rightTrapezoid.top, segment)
-
-            # DONT UNDERSTAND
-            # newRightTopTrapezoid.updateLeftNeighbors(
-            #     {n for n in rightTrapezoid.left_neighbors if segment.aboveLine(n.bottom.right)})
-
-            if not rightPointExists:
-                newRightTrapezoid = Trapezoid(segment.right, rightTrapezoid.right_p, rightTrapezoid.top, rightTrapezoid.bottom)
-                newRightTrapezoid.updateLeftNeighbors({newRightTopTrapezoid, newRightBottomTrapezoid})
-                newRightTrapezoid.updateRightNeighbors(rightTrapezoid.right_neighbors)
+            # Update neighbors for left trapezoids
+            if left_trap:
+                left_trap.right_neighbors = {left_top_trap, left_bottom_trap}
+                left_top_trap.left_neighbors = {left_trap}
+                left_bottom_trap.left_neighbors = {left_trap}
             else:
-                newRightTopTrapezoid.updateRightNeighbors(rightTrapezoid.right_neighbors)
-                newRightBottomTrapezoid.updateRightNeighbors(rightTrapezoid.right_neighbors)
-            
-            # Walk to the right along the new segment and split
-            # each trapezoid into upper and lower ones
-            newTopTrapezoids, newBottomTrapezoids = [newLeftTopTrapezoid], [newLeftBottomTrapezoid]
-            trap_dict = dict()
-            trap_dict[leftTrapezoid] = (newLeftTopTrapezoid, newLeftBottomTrapezoid)
+                left_top_trap.left_neighbors = D0.left_neighbors
+                left_bottom_trap.left_neighbors = D0.left_neighbors
+
+            # Process rightmost trapezoid
+            Dk = rightTrapezoid
+
+            if not rightPointExists and segment.right.x < Dk.right_p.x:
+                right_trap = Trapezoid(segment.right, Dk.right_p, Dk.top, Dk.bottom)
+                right_node = DAGNode(right_trap)
+                trap_dict[right_trap] = right_node
+                self.new_trapezoids.append(right_trap)
+            else:
+                right_trap = None
+                right_node = None
+
+            right_top_trap = Trapezoid(Dk.left_p, segment.right, Dk.top, segment)
+            right_bottom_trap = Trapezoid(Dk.left_p, segment.right, segment, Dk.bottom)
+            right_top_node = DAGNode(right_top_trap)
+            right_bottom_node = DAGNode(right_bottom_trap)
+            self.new_trapezoids.extend([right_top_trap, right_bottom_trap])
+            trap_dict[right_top_trap] = right_top_node
+            trap_dict[right_bottom_trap] = right_bottom_node
+
+            # Update neighbors for right trapezoids
+            if right_trap:
+                right_trap.left_neighbors = {right_top_trap, right_bottom_trap}
+                right_top_trap.right_neighbors = {right_trap}
+                right_bottom_trap.right_neighbors = {right_trap}
+            else:
+                right_top_trap.right_neighbors = Dk.right_neighbors
+                right_bottom_trap.right_neighbors = Dk.right_neighbors
+
+            # Process middle trapezoids
+            prev_top_trap = left_top_trap
+            prev_bottom_trap = left_bottom_trap
+
             for t in intersectingTrapezoids[1:-1]:
-                # create new top and bottom trapezoids
-                newTopTrapezoid = Trapezoid(t.left_p, t.right_p, t.top, segment)
-                newBottomTrapezoid = Trapezoid(t.left_p, t.right_p, segment, t.bottom)
-                
-                # DONT UNDERSTAND
-                # Update neighbors of the new top and bottom
-                # for n in t.left_neighbors:
-                #     if segment.aboveLine(n.bottom.right):
-                #         newTopTrapezoid.updateLeftNeighbors({n})
-                #     if not segment.aboveLine(n.top.right):
-                #         newBottomTrapezoid.updateLeftNeighbors({n})
-                # newTopTrapezoid.updateLeftNeighbors({newTopTrapezoids[-1]})
-                # newBottomTrapezoid.updateLeftNeighbors({newBottomTrapezoids[-1]})
+                # Create new top and bottom trapezoids
+                top_trap = Trapezoid(t.left_p, t.right_p, t.top, segment)
+                bottom_trap = Trapezoid(t.left_p, t.right_p, segment, t.bottom)
+                top_node = DAGNode(top_trap)
+                bottom_node = DAGNode(bottom_trap)
+                self.new_trapezoids.extend([top_trap, bottom_trap])
+                trap_dict[top_trap] = top_node
+                trap_dict[bottom_trap] = bottom_node
 
-                # Add it to the list and dict
-                newTopTrapezoids.append(newTopTrapezoid)
-                newBottomTrapezoids.append(newBottomTrapezoid)
-                trap_dict[t] = (newTopTrapezoid, newBottomTrapezoid)
+                # Update neighbors
+                top_trap.left_neighbors = {prev_top_trap}
+                bottom_trap.left_neighbors = {prev_bottom_trap}
+                prev_top_trap.right_neighbors = {top_trap}
+                prev_bottom_trap.right_neighbors = {bottom_trap}
 
-                # repeat for right top, bottom trapezoids
-                newRightTopTrapezoid.updateLeftNeighbors({newTopTrapezoids[-1]})
-                newRightBottomTrapezoid.updateLeftNeighbors({newBottomTrapezoids[-1]})
-                newTopTrapezoids.append(newRightTopTrapezoid)
-                newBottomTrapezoids.append(newRightBottomTrapezoid)
-                trap_dict[rightTrapezoid] = (newRightTopTrapezoid, newRightBottomTrapezoid)
+                # Right neighbors inherit from the original trapezoid
+                top_trap.right_neighbors = t.right_neighbors
+                bottom_trap.right_neighbors = t.right_neighbors
+
+                # Create segment node
+                s_node = DAGNode(segment, top_node, bottom_node)
+
+                # Replace the old trapezoid's node in the DAG
+                t.node.modify(s_node)
+
+                # Update previous traps for next iteration
+                prev_top_trap = top_trap
+                prev_bottom_trap = bottom_trap
+
+            # Connect last middle trapezoids to rightmost trapezoids
+            right_top_trap.left_neighbors = {prev_top_trap}
+            right_bottom_trap.left_neighbors = {prev_bottom_trap}
+            prev_top_trap.right_neighbors = {right_top_trap}
+            prev_bottom_trap.right_neighbors = {right_bottom_trap}
+
+            # Build the DAG nodes for leftmost trapezoid
+            s_node_left = DAGNode(segment, left_top_node, left_bottom_node)
+            if left_node:
+                p_node = DAGNode(segment.left, left_node, s_node_left)
+            else:
+                p_node = DAGNode(segment.left, None, s_node_left)
+            D0.node.modify(p_node)
+
+            # Build the DAG nodes for rightmost trapezoid
+            s_node_right = DAGNode(segment, right_top_node, right_bottom_node)
+            if right_node:
+                q_node = DAGNode(segment.right, s_node_right, right_node)
+            else:
+                q_node = DAGNode(segment.right, s_node_right, None)
+            Dk.node.modify(q_node)
+
+            # Update neighbor relationships for rightmost trapezoids
+            if right_trap:
+                right_trap.left_neighbors = {right_top_trap, right_bottom_trap}
+                trap_dict[right_trap] = right_node
+
+        for trap in self.new_trapezoids:
+            if not hasattr(trap, 'label'):
+                trap.label = f'T{self.trapezoid_counter}'
+                self.trapezoid_counter += 1
