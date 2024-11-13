@@ -39,7 +39,7 @@ if __name__ == '__main__':
         # Initialize algorithm 
         for i in range(0, 1):
             R = RandomizedIncrementalConstruction(segments, boundBottomLeft, boundTopRight)
-            matrix = R.DAG.build_adjancency_matrix()
+            matrix = R.DAG.build_adjacency_matrix(segments)
             # print("-------OUTPUT MATRIX-------")
             # for key, value in matrix.items():
             #     print(f"{key}:")
