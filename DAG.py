@@ -10,7 +10,7 @@ class DAG:
     def __init__(self, root):
         assert isinstance(root, DAGNode)
         self.root = root
-
+    # builds adjacency list for DAG
     def build_adjacency_list(self):
         visited = set()
         queue = deque([self.root])
@@ -33,14 +33,15 @@ class DAG:
                     a_list[matrix_object].append(curr_node.right_child.graph_object)
             else:
                 a_list[curr_node.graph_object]
-        print("-------OUTPUT ADJACENCY LIST-------\n")
-        for key, value in a_list.items():
-            print(f"{key}:")
-            for n in value:
-                print(n)
-            print()
+        # print("-------OUTPUT ADJACENCY LIST-------\n")
+        # for key, value in a_list.items():
+        #     print(f"{key}:")
+        #     for n in value:
+        #         print(n)
+        #     print()
         return a_list
     
+    # builds adjacency matrix for DAG
     def build_adjacency_matrix(self, segments):
         # get adjacency list
         a_list = self.build_adjacency_list()
@@ -97,18 +98,18 @@ class DAG:
             for j in range(1, len(adj_matrix)):
                 row_sum += adj_matrix[i][j]
                 col_sum += adj_matrix[j][i]
-            print("colsum", col_sum)
             adj_matrix[i][-1] = row_sum
             row_total.append(col_sum)
         row_total.append('')
         adj_matrix.append(row_total)
         
         # adj_matrix.pop(0)
-        
+        columns = adj_matrix[0]
+        # index = [row[0] for row in adj_matrix[1:]]  # First item in each row as index
+        # values = [row[1:] for row in adj_matrix[1:]] 
         
         print("-------OUTPUT ADJACENCY MATRIX-------\n")
-        df = pd.DataFrame(adj_matrix)
+        df = pd.DataFrame(adj_matrix[1:], columns=columns)
+    
         print(df)
-        # for row in adj_matrix:
-        #     print(row)
-        # return adj_matrix
+        return df, node_names

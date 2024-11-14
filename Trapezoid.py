@@ -48,7 +48,6 @@ class Trapezoid(GraphObject):
         if not neighbors or self.top.left == self.bottom.left:
             return
         if self.is_zero_width:
-            """ zero-width trapezoid """
             y_high = self.left_p.y
             y_low = self.right_p.y
         # if my left point is the same as my top segment left point
@@ -68,10 +67,10 @@ class Trapezoid(GraphObject):
 
         for n in neighbors:
             # if the neighbor already exists or its not directly adjacent to self, then skip
+            # get new neighbor's right top, bottom points
             if n in self.left_neighbors or self.left_p.x != n.right_p.x:
                 continue
             if n.is_zero_width:
-                """ zero-width trapezoid """
                 ny_high = n.left_p.y
                 ny_low = n.right_p.y
             elif n.right_p == n.top.right:
@@ -88,7 +87,7 @@ class Trapezoid(GraphObject):
                 l = n.top
                 ny_high = l.slope * n.right_p.x + l.intercept
 
-            # sides overlap
+            # if sides overlap, then n is a valid neighbor
             if ny_low < y_high < ny_high or ny_low < y_low < ny_high \
                     or y_low < ny_low < y_high or y_low < ny_high < y_high \
                     or (y_low == ny_low and y_high == ny_high):
@@ -125,7 +124,6 @@ class Trapezoid(GraphObject):
             if n in self.right_neighbors or self.right_p.x != n.left_p.x:
                 continue
             if n.is_zero_width:
-                """ zero-width trapezoid """
                 ny_high = n.left_p.y
                 ny_low = n.right_p.y
             elif n.left_p == n.top.left:
